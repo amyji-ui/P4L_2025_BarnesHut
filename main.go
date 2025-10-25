@@ -1,3 +1,4 @@
+// Amy Ji
 package main
 
 import (
@@ -12,7 +13,7 @@ func main() {
 	// but feel free to change the positions of the galaxies.
 
 	g0 := InitializeGalaxy(500, 4e21, 7e22, 2e22)
-	g1 := InitializeGalaxy(500, 4e21, 3e22, 7e22)
+	//g1 := InitializeGalaxy(500, 4e21, 3e22, 7e22)
 
 	// you probably want to apply a "push" function at this point to these galaxies to move
 	// them toward each other to collide.
@@ -20,12 +21,13 @@ func main() {
 	// too slow and the black holes at the center collide and hilarity ensues.
 
 	width := 1.0e23
-	galaxies := []Galaxy{g0, g1}
+	//galaxies := []Galaxy{g0, g1}
+	galaxies := []Galaxy{g0}
 
 	initialUniverse := InitializeUniverse(galaxies, width)
 
 	// now evolve the universe: feel free to adjust the following parameters.
-	numGens := 100000
+	numGens := 10000
 	time := 2e14
 	theta := 0.5
 
