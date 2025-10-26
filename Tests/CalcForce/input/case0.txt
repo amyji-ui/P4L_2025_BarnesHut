@@ -1,0 +1,5 @@
+0 0
+3 4
+
+# position of star1 and star2
+# Default mass1 = 2; mass2 = 3; G = 6.67e-11

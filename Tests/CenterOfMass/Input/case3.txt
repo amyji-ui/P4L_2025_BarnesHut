@@ -1,0 +1,6 @@
+# two overlapping stars + one non-overlapping star.
+0 0 2
+0 0 3
+4 0 5
+
+

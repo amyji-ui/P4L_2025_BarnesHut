@@ -1,3 +1,5 @@
+# Each line represents a star: position.x, position.y, mass
 1 1 2
 3 1 1
 2 4 2
+

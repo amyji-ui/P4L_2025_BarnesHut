@@ -1,0 +1,3 @@
+# On the horizontal midline
+0 0 10
+2 5

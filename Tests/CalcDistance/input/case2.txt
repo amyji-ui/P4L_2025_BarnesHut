@@ -1,0 +1,4 @@
+-1 1
+1 -1
+
+# Negative position index.(Should result in a positive number)

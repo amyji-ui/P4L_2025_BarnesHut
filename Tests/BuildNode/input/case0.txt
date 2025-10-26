@@ -1,0 +1,5 @@
+# Quadrant: bottom-left corner (0,0), width=10
+0 0 10
+# Stars: x y mass
+2 2 2
+8 8 2

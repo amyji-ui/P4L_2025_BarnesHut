@@ -1,0 +1,2 @@
+# Output: 0-3 indicating which quadrant the star has been assigned to.
+1

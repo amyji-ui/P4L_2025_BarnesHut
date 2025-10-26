@@ -1,0 +1,6 @@
+# Each line represent a star: postion.x, position.x, mass
+# simple 3 stars
+0 0 1
+1 1 2
+2 2 3
+

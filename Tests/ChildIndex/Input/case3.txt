@@ -1,0 +1,3 @@
+# Non-origin quadrant
+10 10 10
+17 17

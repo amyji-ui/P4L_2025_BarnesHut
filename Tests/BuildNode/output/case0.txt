@@ -1,0 +1,3 @@
+# Expected total mass and center of mass
+# Results are calculated by ChatGPT 5.0
+4 5 5 2

@@ -1,6 +1,5 @@
 // Amy Ji
-// I had some issue with drawing out the gif and I change the drawing.go file.
-// The background color is changed to grey.
+
 package main
 
 import (
@@ -44,15 +43,13 @@ func (u *Universe) DrawToCanvas(canvasWidth int, scalingFactor float64) image.Im
 	c := canvas.CreateNewCanvas(canvasWidth, canvasWidth)
 
 	// create a grey background
-	c.SetFillColor(canvas.MakeColor(200, 200, 200))
+	c.SetFillColor(canvas.MakeColor(50, 50, 50))
 	c.ClearRect(0, 0, canvasWidth, canvasWidth)
 	c.Fill()
 
 	// range over all the bodies and draw them.
 	for _, b := range u.stars {
-		if b.position.x < 0 || b.position.x > u.width || b.position.y < 0 || b.position.y > u.width {
-        fmt.Printf("Star outside canvas: (%.2e, %.2e)\n", b.position.x, b.position.y)
-    	}
+	
 		c.SetFillColor(canvas.MakeColor(b.red, b.green, b.blue))
 		cx := (b.position.x / u.width) * float64(canvasWidth)
 		cy := (b.position.y / u.width) * float64(canvasWidth)

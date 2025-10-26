@@ -20,18 +20,17 @@ func BarnesHut(initialUniverse *Universe, numGens int, time, theta float64) []*U
 
 }
 
-
 func UpdateUniverse(currentUniverse *Universe, time float64, theta float64) *Universe {
 	
 	newUniverse := CopyUniverse(currentUniverse)
 	tree := GenerateQuadTree(currentUniverse)
 	
-	// First pass: calculate all new accelerations
+	// calculate all new accelerations
     for i := range newUniverse.stars {
         newUniverse.stars[i].acceleration = UpdateAcceleration(tree.root, newUniverse.stars[i], theta)
     }
     
-    // Second pass: update velocities and positions using OLD values from currentUniverse
+    // update velocities and positions using OLD values from currentUniverse
     for i := range newUniverse.stars {
         oldStar := currentUniverse.stars[i]
         newUniverse.stars[i].velocity = UpdateVelocity(newUniverse.stars[i], oldStar.acceleration, time)
@@ -56,6 +55,7 @@ func GenerateQuadTree(currentUniverse *Universe) QuadTree {
     return QuadTree{root: rootNode}
 }
 
+//
 func BuildNode (quadrant Quadrant, stars []*Star) *Node {
 	starList := CountStarsInQuadrant(quadrant, stars)
 	n := len(starList)
@@ -313,6 +313,10 @@ func CopyStar(s *Star) *Star {
 
 	s2.mass = s.mass
 	s2.radius = s.radius
+
+	s2.red = s.red
+	s2.green = s.green
+	s2.blue = s.blue
 
 	return &s2
 }

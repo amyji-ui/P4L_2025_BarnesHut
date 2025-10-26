@@ -1,0 +1,5 @@
+# Four stars all in different quadrants. (Output should be  0 0)
+1 1 2
+-1 1 2
+-1 -1 2
+1 -1 2

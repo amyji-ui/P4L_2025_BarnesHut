@@ -1,0 +1,4 @@
+# x_min, y_min, width of quadrant
+0 0 10
+# Corrdinate of a star inside the quadrant
+7 8

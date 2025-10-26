@@ -1,0 +1,2 @@
+# Very tiny quadrant
+0 0 0.2
