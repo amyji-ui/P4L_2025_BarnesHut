@@ -1,45 +1,272 @@
-// Amy Ji
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"strings"
 	"gifhelper"
+	"math"
 )
 
 func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: go run main.go <command>")
+		fmt.Println("Commands: jupiter | galaxy | collision")
+		return
+	}
+	switch os.Args[1] {
+	case "jupiter":
+		GenerateJupiterSystem("./jupiterMoons.txt")
+	case "galaxy":
+		GenerateGalaxy()
+	case "collision":
+		GenerateCollision()
+	default:
+		fmt.Println("Unknown command:", os.Args[1])
+	}
+}
 
-	// the following sample parameters may be helpful for the "collide" command
-	// all units are in SI (meters, kg, etc.)
-	// but feel free to change the positions of the galaxies.
+/* ------------------------- Jupiter ------------------------- */
 
-	g0 := InitializeGalaxy(500, 4e21, 7e22, 2e22)
-	//g1 := InitializeGalaxy(500, 4e21, 3e22, 7e22)
+func GenerateJupiterSystem(path string) {
+	initialUniverse, err := ReadJupiterData(path)
+	if err != nil {
+		panic(err)
+	}
 
-	// you probably want to apply a "push" function at this point to these galaxies to move
-	// them toward each other to collide.
-	// be careful: if you push them too fast, they'll just fly through each other.
-	// too slow and the black holes at the center collide and hilarity ensues.
-
-	width := 1.0e23
-	//galaxies := []Galaxy{g0, g1}
-	galaxies := []Galaxy{g0}
-
-	initialUniverse := InitializeUniverse(galaxies, width)
-
-	// now evolve the universe: feel free to adjust the following parameters.
-	numGens := 10000
-	time := 2e14
+	// Conservative step + θ so it doesn’t blow up and stays on-screen
+	numGens := 40000
+	dt := 7.0     // seconds
 	theta := 0.5
 
-	timePoints := BarnesHut(initialUniverse, numGens, time, theta)
+	timePoints := BarnesHut(initialUniverse, numGens, dt, theta)
 
 	fmt.Println("Simulation run. Now drawing images.")
-	canvasWidth := 1000
-	frequency := 1000
-	scalingFactor := 1e11 // a scaling factor is needed to inflate size of stars when drawn because galaxies are very sparse
-	imageList := AnimateSystem(timePoints, canvasWidth, frequency, scalingFactor)
+	canvasWidth := 600
+	frequency := 500         
+	scalingFactor := 5.0
+
+	images := AnimateSystem(timePoints, canvasWidth, frequency, scalingFactor)
 
 	fmt.Println("Images drawn. Now generating GIF.")
-	gifhelper.ImagesToGIF(imageList, "galaxy")
+	gifhelper.ImagesToGIF(images, "jupiter")
 	fmt.Println("GIF drawn.")
 }
+
+/* ---------------------------- Single galaxy ---------------------------- */
+
+func GenerateGalaxy() {
+	// One disk galaxy, centered around (5e22, 5e22) with ~500 stars
+	g0 := InitializeGalaxy(500, 4e21, 5e22, 5e22)
+
+	// Wider camera than initial disk so it stays in frame
+	width := 1.0e23
+	galaxies := []Galaxy{g0}
+	initialUniverse := InitializeUniverse(galaxies, width)
+
+	// Parameters tuned for stable, visible rotation and a ~100-frame GIF
+	numGens := 40000
+	dt := 2e16
+	theta := 0.5
+
+	timePoints := BarnesHut(initialUniverse, numGens, dt, theta)
+
+	fmt.Println("Simulation run. Now drawing images.")
+	canvasWidth := 800
+	frequency := 1000
+	scalingFactor := 2e11  // galaxies are sparse—inflate star dots
+
+	images := AnimateSystem(timePoints, canvasWidth, frequency, scalingFactor)
+
+	fmt.Println("Images drawn. Now generating GIF.")
+	gifhelper.ImagesToGIF(images, "galaxy")
+	fmt.Println("GIF drawn.")
+
+}
+
+/* ---------------------------- Galaxy collision ---------------------------- */
+func GenerateCollision() {
+    // Two disks offset so they will graze and merge
+    g0 := InitializeGalaxy(500, 4e21, 7e22, 2e22)
+    g1 := InitializeGalaxy(500, 4e21, 3e22, 7e22)
+
+    // Push galaxies toward each other along their connecting line
+    PushGalaxies(g0, g1, 0.5e4)
+
+    width := 1e23
+    initialUniverse := InitializeUniverse([]Galaxy{g0, g1}, width)
+
+    // Time and solver parameters tuned for visible collision
+    numGens := 60000
+    dt := 2e14       // same timestep that works for GenerateGalaxy
+    theta := 0.5
+
+    fmt.Println("Starting collision simulation with", len(initialUniverse.stars), "stars.")
+    timePoints := BarnesHut(initialUniverse, numGens, dt, theta)
+
+    // Visualization parameters
+    canvasWidth := 1000
+    frequency := 1000
+    scalingFactor := 1.5e11
+    images := AnimateSystem(timePoints, canvasWidth, frequency, scalingFactor)
+
+    gifhelper.ImagesToGIF(images, "collision")
+    fmt.Println("GIF drawn.")
+}
+
+
+
+// PushGalaxies gives two galaxies equal and opposite velocity pushes
+// so they drift toward each other for a collision simulation.
+func PushGalaxies(g0, g1 Galaxy, speed float64) {
+    c0 := CenterOfMass(g0)
+    c1 := CenterOfMass(g1)
+
+    // Compute direction vector from g0 → g1
+    dx := c1.x - c0.x
+    dy := c1.y - c0.y
+    dist := math.Sqrt(dx*dx + dy*dy)
+    if dist == 0 {
+        return
+    }
+
+    // Normalize to unit vector
+    dx /= dist
+    dy /= dist
+
+    // Push galaxies toward each other
+    for _, s := range g0 {
+        s.velocity.x = dx * speed
+        s.velocity.y = dy * speed
+    }
+    for _, s := range g1 {
+        s.velocity.x = -dx * speed
+        s.velocity.y = -dy * speed
+    }
+}
+
+
+
+
+/* ------------------------------ File reader ------------------------------ */
+
+func ReadJupiterData(path string) (*Universe, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	sc := bufio.NewScanner(f)
+	read := func() (string, error) {
+		for sc.Scan() {
+			s := strings.TrimSpace(sc.Text())
+			if s == "" {
+				continue
+			}
+			return s, nil
+		}
+		if err := sc.Err(); err != nil {
+			return "", err
+		}
+		return "", io.EOF
+	}
+
+	// width
+	wstr, err := read()
+	if err != nil {
+		return nil, fmt.Errorf("width: %w", err)
+	}
+	width, err := strconv.ParseFloat(wstr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("width parse: %w", err)
+	}
+
+	// G (ignored; we use const G in code)
+	if _, err := read(); err != nil {
+		return nil, fmt.Errorf("G line: %w", err)
+	}
+
+	var stars []*Star
+	for {
+		// >Name
+		h, err := read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !strings.HasPrefix(h, ">") {
+			return nil, fmt.Errorf("expected '>' header, got %q", h)
+		}
+
+		// RGB
+		rgbLine, err := read()
+		if err != nil {
+			return nil, err
+		}
+		var R, Gc, B int
+		if _, err := fmt.Sscanf(rgbLine, "%d,%d,%d", &R, &Gc, &B); err != nil {
+			return nil, fmt.Errorf("rgb parse %q: %w", rgbLine, err)
+		}
+
+		// mass
+		massLine, err := read()
+		if err != nil {
+			return nil, err
+		}
+		mass, err := strconv.ParseFloat(massLine, 64)
+		if err != nil {
+			return nil, fmt.Errorf("mass parse %q: %w", massLine, err)
+		}
+
+		// radius
+		radLine, err := read()
+		if err != nil {
+			return nil, err
+		}
+		radius, err := strconv.ParseFloat(radLine, 64)
+		if err != nil {
+			return nil, fmt.Errorf("radius parse %q: %w", radLine, err)
+		}
+
+		// position
+		posLine, err := read()
+		if err != nil {
+			return nil, err
+		}
+		var px, py float64
+		if _, err := fmt.Sscanf(posLine, "%f,%f", &px, &py); err != nil {
+			return nil, fmt.Errorf("pos parse %q: %w", posLine, err)
+		}
+
+		// velocity
+		velLine, err := read()
+		if err != nil {
+			return nil, err
+		}
+		var vx, vy float64
+		if _, err := fmt.Sscanf(velLine, "%f,%f", &vx, &vy); err != nil {
+			return nil, fmt.Errorf("vel parse %q: %w", velLine, err)
+		}
+
+		stars = append(stars, &Star{
+			position:     OrderedPair{px, py},
+			velocity:     OrderedPair{vx, vy},
+			acceleration: OrderedPair{},
+			mass:         mass,
+			radius:       radius,
+			// file is R,G,B; struct is red, blue, green
+			red:   uint8(R),
+			blue:  uint8(B),
+			green: uint8(Gc),
+		})
+	}
+
+	return &Universe{stars: stars, width: width}, nil
+}
+

@@ -1,151 +1,242 @@
-// Amy Ji
+package main
+
+// parser_universe.go
 package main
 
 import (
 	"bufio"
 	"fmt"
-	"math"
+	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"testing"
 )
 
-// CenterOfMassTest holds one case worth of stars and the expected COM.
-type CenterOfMassTest struct {
-	stars         []*Star
-	expectedX     float64
-	expectedY     float64
+// ParseUniverseFromFile reads your width/G/blocks format:
+//   line 1: <width>
+//   line 2: <G>         (ignored; code uses const G)
+//   then for each body:
+//     >Name
+//     R,G,B
+//     mass
+//     radius
+//     x,y
+//     vx,vy
+func ParseUniverseFromFile(path string) (*Universe, error) {
+	f, err := os.Open(path)
+	if err != nil { return nil, err }
+	defer f.Close()
+	return parseUniverse(bufio.NewScanner(f))
 }
 
-func ReadCenterOfMassTests(directory string) []CenterOfMassTest {
-	inputDir := filepath.Join(directory, "Input")
-	outputDir := filepath.Join(directory, "Output")
-
-	inputFiles := mustReadDir(inputDir)
-	outputFiles := mustReadDir(outputDir)
-	if len(inputFiles) != len(outputFiles) {
-		panic("Error: number of input and output files do not match!")
+func parseUniverse(sc *bufio.Scanner) (*Universe, error) {
+	next := func() (string, error) {
+		for sc.Scan() {
+			s := strings.TrimSpace(sc.Text())
+			if s == "" || strings.HasPrefix(s, "#") { // allow blank/comments
+				continue
+			}
+			return s, nil
+		}
+		if err := sc.Err(); err != nil { return "", err }
+		return "", io.EOF
 	}
 
-	// index output files by name for 1:1 pairing
-	outMap := map[string]string{}
-	for _, f := range outputFiles {
-		outMap[f.Name()] = filepath.Join(outputDir, f.Name())
+	// width
+	wstr, err := next()
+	if err != nil { return nil, fmt.Errorf("width: %w", err) }
+	width, err := strconv.ParseFloat(wstr, 64)
+	if err != nil { return nil, fmt.Errorf("parse width %q: %w", wstr, err) }
+
+	// G (ignored)
+	if _, err := next(); err != nil {
+		return nil, fmt.Errorf("G line: %w", err)
 	}
 
-	var tests []CenterOfMassTest
-	for _, in := range inputFiles {
-		name := in.Name()
-		inPath := filepath.Join(inputDir, name)
-		outPath, ok := outMap[name]
-		if !ok {
-			panic("Error: missing output file for " + name)
+	var stars []*Star
+	for {
+		h, err := next()
+		if err == io.EOF { break }
+		if err != nil { return nil, err }
+		if !strings.HasPrefix(h, ">") {
+			return nil, fmt.Errorf("expected '>' header, got %q", h)
 		}
 
-		stars := readStarsFromFile(inPath)
-		ex, ey := readTwoFloatsFromFile(outPath)
+		rgb, err := next()
+		if err != nil { return nil, err }
+		R, Gc, B, err := parseRGB(rgb)
+		if err != nil { return nil, fmt.Errorf("rgb %q: %w", rgb, err) }
 
-		tests = append(tests, CenterOfMassTest{
-			stars:     stars,
-			expectedX: ex,
-			expectedY: ey,
+		massLine, err := next()
+		if err != nil { return nil, err }
+		mass, err := strconv.ParseFloat(massLine, 64)
+		if err != nil { return nil, fmt.Errorf("mass %q: %w", massLine, err) }
+
+		radLine, err := next()
+		if err != nil { return nil, err }
+		radius, err := strconv.ParseFloat(radLine, 64)
+		if err != nil { return nil, fmt.Errorf("radius %q: %w", radLine, err) }
+
+		posLine, err := next()
+		if err != nil { return nil, err }
+		px, py, err := parsePair(posLine)
+		if err != nil { return nil, fmt.Errorf("pos %q: %w", posLine, err) }
+
+		velLine, err := next()
+		if err != nil { return nil, err }
+		vx, vy, err := parsePair(velLine)
+		if err != nil { return nil, fmt.Errorf("vel %q: %w", velLine, err) }
+
+		stars = append(stars, &Star{
+			position:     OrderedPair{px, py},
+			velocity:     OrderedPair{vx, vy},
+			acceleration: OrderedPair{},
+			mass:         mass,
+			radius:       radius,
+			// file: R,G,B  ; struct fields: red, blue, green
+			red:   uint8(R),
+			blue:  uint8(B),
+			green: uint8(Gc),
 		})
 	}
 
-	return tests
+	return &Universe{stars: stars, width: width}, nil
 }
 
-func mustReadDir(dir string) []os.DirEntry {
-	files, err := os.ReadDir(dir)
+func parseRGB(s string) (int, int, int, error) {
+	parts := splitCSV(s)
+	if len(parts) != 3 { return 0,0,0, fmt.Errorf("want 3, got %d", len(parts)) }
+	r, err := strconv.Atoi(parts[0]); if err != nil { return 0,0,0, err }
+	g, err := strconv.Atoi(parts[1]); if err != nil { return 0,0,0, err }
+	b, err := strconv.Atoi(parts[2]); if err != nil { return 0,0,0, err }
+	return r, g, b, nil
+}
+
+func parsePair(s string) (float64, float64, error) {
+	parts := splitCSV(s)
+	if len(parts) != 2 { return 0,0, fmt.Errorf("want 2, got %d", len(parts)) }
+	x, err := strconv.ParseFloat(parts[0], 64); if err != nil { return 0,0, err }
+	y, err := strconv.ParseFloat(parts[1], 64); if err != nil { return 0,0, err }
+	return x, y, nil
+}
+
+func splitCSV(s string) []string {
+	raw := strings.Split(s, ",")
+	out := make([]string, 0, len(raw))
+	for _, p := range raw {
+		out = append(out, strings.TrimSpace(p))
+	}
+	return out
+}
+
+
+type pair = OrderedPair
+
+func TestCalculateNetForce_IO(t *testing.T) {
+	base := "Tests/CalculateNetForce"
+	inDir := filepath.Join(base, "input")
+	outDir := filepath.Join(base, "output")
+
+	inputs, err := filepath.Glob(filepath.Join(inDir, "*.txt"))
 	if err != nil {
-		panic(err)
+		t.Fatalf("glob: %v", err)
 	}
-	return files
-}
-
-func readStarsFromFile(file string) []*Star {
-	f, err := os.Open(file)
-	if err != nil {
-		panic(err)
+	if len(inputs) == 0 {
+		t.Fatalf("no input files in %q", inDir)
 	}
-	defer f.Close()
 
-	var stars []*Star
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) != 3 {
-			panic(fmt.Errorf("%s: each non-comment line must be 'x y m'", file))
-		}
-		x, err1 := strconv.ParseFloat(fields[0], 64)
-		y, err2 := strconv.ParseFloat(fields[1], 64)
-		m, err3 := strconv.ParseFloat(fields[2], 64)
-		if err1 != nil || err2 != nil || err3 != nil {
-			panic(fmt.Errorf("%s: bad star numbers on line: %q", file, line))
-		}
-		stars = append(stars, &Star{position: OrderedPair{x: x, y: y}, mass: m})
-	}
-	if err := sc.Err(); err != nil {
-		panic(err)
-	}
-	return stars
-}
+	for _, inPath := range inputs {
+		name := filepath.Base(inPath)
+		outPath := filepath.Join(outDir, name)
 
-func readTwoFloatsFromFile(file string) (float64, float64) {
-	f, err := os.Open(file)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
+		t.Run(name, func(t *testing.T) {
+			u, err := ParseUniverseFromFile(inPath)
+			if err != nil {
+				t.Fatalf("parse %s: %v", inPath, err)
+			}
 
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			panic(fmt.Errorf("%s: need two floats 'ex ey'", file))
-		}
-		ex, err1 := strconv.ParseFloat(fields[0], 64)
-		ey, err2 := strconv.ParseFloat(fields[1], 64)
-		if err1 != nil || err2 != nil {
-			panic(fmt.Errorf("%s: cannot parse expect_com numbers", file))
-		}
-		return ex, ey
-	}
-	if err := sc.Err(); err != nil {
-		panic(err)
-	}
-	panic(fmt.Errorf("%s: no data found", file))
-}
+			theta, relTol, expected, err := readExpected(outPath)
+			if err != nil {
+				t.Fatalf("read expected %s: %v", outPath, err)
+			}
+			if len(expected) != len(u.stars) {
+				t.Fatalf("expected %d force rows, got %d",
+					len(u.stars), len(expected))
+			}
 
-func roundFloat(val float64, precision uint) float64 {
-	ratio := math.Pow(10, float64(precision))
-	return math.Round(val*ratio) / ratio
-}
-
-
-// ------- actual tests -------
-// TestCenterOfMass reads paired txt files from Tests/CenterOfMass/input|output
-// and checks CenterOfMass result.
-func TestCenterOfMass(t *testing.T) {
-	tests := ReadCenterOfMassTests("Tests/CenterOfMass/")
-	for i, tc := range tests {
-		t.Run(fmt.Sprintf("case_%02d", i+1), func(t *testing.T) {
-			got := CenterOfMass(tc.stars)
-			if roundFloat(got.x, 6) != roundFloat(tc.expectedX, 6) ||
-				roundFloat(got.y, 6) != roundFloat(tc.expectedY, 6) {
-				t.Fatalf("CenterOfMass mismatch: got=(%.6f, %.6f) want=(%.6f, %.6f)",
-					got.x, got.y, tc.expectedX, tc.expectedY)
+			qt := GenerateQuadTree(u)
+			for i := range u.stars {
+				got := CalculateNetForce(qt.root, u.stars[i], theta)
+				want := expected[i]
+				if !forceClose(got, want, relTol) {
+					t.Fatalf("star %d: got (%.6e, %.6e), want (%.6e, %.6e) [rel %.2g theta=%.3f]",
+					 i, got.x, got.y, want.x, want.y, relTol, theta)
+				}
 			}
 		})
 	}
+}
+
+// readExpected supports headers and forces:
+//   theta=0.6
+//   reltol=0.15
+//   fx, fy
+//   # comments and blanks ignored
+func readExpected(path string) (theta, relTol float64, forces []pair, err error) {
+	theta = 0.6
+	relTol = 0.15
+
+	f, err := os.Open(path)
+	if err != nil { return 0, 0, nil, err }
+	defer f.Close()
+
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") { continue }
+
+		// headers
+		lc := strings.ToLower(line)
+		switch {
+		case strings.HasPrefix(lc, "theta="):
+			val := strings.TrimSpace(line[len("theta="):])
+			if theta, err = strconv.ParseFloat(val, 64); err != nil {
+				return 0, 0, nil, fmt.Errorf("theta %q: %w", val, err)
+			}
+			continue
+		case strings.HasPrefix(lc, "reltol="):
+			val := strings.TrimSpace(line[len("reltol="):])
+			if relTol, err = strconv.ParseFloat(val, 64); err != nil {
+				return 0, 0, nil, fmt.Errorf("reltol %q: %w", val, err)
+			}
+			continue
+		}
+
+		// allow "i: fx, fy" -> strip index if present
+		if idx := strings.Index(line, ":"); idx >= 0 {
+			line = strings.TrimSpace(line[idx+1:])
+		}
+
+		parts := splitCSV(line)
+		if len(parts) != 2 {
+			return 0, 0, nil, fmt.Errorf("want 2 values, got %d in %q", len(parts), line)
+		}
+		fx, err := strconv.ParseFloat(parts[0], 64); if err != nil {
+			return 0, 0, nil, fmt.Errorf("fx %q: %w", parts[0], err)
+		}
+		fy, err := strconv.ParseFloat(parts[1], 64); if err != nil {
+			return 0, 0, nil, fmt.Errorf("fy %q: %w", parts[1], err)
+		}
+		forces = append(forces, pair{fx, fy})
+	}
+	if err := sc.Err(); err != nil {
+		return 0, 0, nil, err
+	}
+	return theta, relTol, forces, nil
+}
+
+func forceClose(a, b pair, rel float64) bool {
+	diff := math.Hypot(a.x-b.x, a.y-b.y)
+	base := math.Max(math.Hypot(b.x, b.y), 1e-30)
+	return diff/base <= rel
 }
