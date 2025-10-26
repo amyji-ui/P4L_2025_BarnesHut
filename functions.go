@@ -1,8 +1,7 @@
 // Amy Ji
 package main
 
-import (
-		"math")
+import ("math")
 
 
 //BarnesHut is our highest level function.
@@ -20,6 +19,10 @@ func BarnesHut(initialUniverse *Universe, numGens int, time, theta float64) []*U
 
 }
 
+// ============================ Main Functions ===============================
+
+// UpdateUniverse takes as input currentUniverse, time and theta
+// It returns a pointer to a new universe which has updated stars (accelerations, velocity and positions)
 func UpdateUniverse(currentUniverse *Universe, time float64, theta float64) *Universe {
 	
 	newUniverse := CopyUniverse(currentUniverse)
@@ -55,7 +58,9 @@ func GenerateQuadTree(currentUniverse *Universe) QuadTree {
     return QuadTree{root: rootNode}
 }
 
-//
+// BuildNode takes as input a quadrant and an array of pointers to stars
+// It first determine if there's any star in that quadrant
+// Then further seperates the stars to subquadrants until ther's no more star in subquadrants.
 func BuildNode (quadrant Quadrant, stars []*Star) *Node {
 	starList := CountStarsInQuadrant(quadrant, stars)
 	n := len(starList)
@@ -98,7 +103,7 @@ func BuildNode (quadrant Quadrant, stars []*Star) *Node {
     	position: quadCom, 
     	mass: quadMass,
     	radius: 0, // Dummy stars shouldn't be drawn
-    	red: 0, green: 0, blue: 0, // Make them invisible
+    	red: 0, green: 0, blue: 0, 
 	}
 
 	// Return the internal node.
@@ -149,6 +154,11 @@ func CalculateNetForce(node *Node, currStar *Star, theta float64) OrderedPair {
 	return NetForce
 }
 
+
+//========================== Helper Functions ====================================
+
+// CalcForce takes as input two stars and gravity constant
+// it returns the force exerted on star1 by star2
 func CalcForce (s1, s2 *Star, G float64) OrderedPair {
 	var Force OrderedPair
 	d := CalcDistance(s1.position, s2.position)
@@ -168,13 +178,13 @@ func CalcForce (s1, s2 *Star, G float64) OrderedPair {
 
 }
 
+// CalcDistance takes as input two positions and calculate the distance between them.
 func CalcDistance(p1, p2 OrderedPair) float64 {
 	// this is the distance formula from days of precalculus long ago ...
 	deltaX := p1.x - p2.x
 	deltaY := p1.y - p2.y
 	return math.Sqrt(deltaX*deltaX + deltaY*deltaY)
 }
-
 
 // childIndex takes as input a parent Quadrant and a star position,
 // and returns the index (0 to 3) of the child quadrant that contains the position.
@@ -250,7 +260,6 @@ func CenterOfMass (stars []*Star) OrderedPair {
 
 	return center
 }
-
 
 func UpdateAcceleration(root *Node, s *Star, theta float64) OrderedPair {
 	var accel OrderedPair 

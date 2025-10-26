@@ -99,7 +99,7 @@ func GenerateCollision() {
     initialUniverse := InitializeUniverse([]Galaxy{g0, g1}, width)
 
     numGens := 100000
-    dt := 1e14     
+    dt := 1e15     
     theta := 0.5
 
     fmt.Println("Starting collision simulation with", len(initialUniverse.stars), "stars.")
